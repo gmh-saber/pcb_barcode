@@ -352,7 +352,7 @@
 // }
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Printer, Download, RefreshCw, Layers, Settings, FileText, Layout, AlertCircle, Grid3X3 } from 'lucide-react';
+import { Printer, Download, RefreshCw, Layers, Settings, FileText, Layout, AlertCircle, Grid3X3, History, X, Trash2 } from 'lucide-react';
 
 // Shared Barcode Options to ensure Preview and Export match
 const BARCODE_OPTIONS = {
@@ -400,22 +400,32 @@ export default function App() {
   
   // General Configuration
   const [config, setConfig] = useState({
-    prefix: 'PCB-Pulse-450-',
+    prefix: 'PCB-MP-',
     startNum: 1,
-    count: 40, 
+    count: 80, 
     padding: 6
   });
 
   // Print Configuration
-  const [printMode, setPrintMode] = useState('single');
+  const [printMode, setPrintMode] = useState('grid');
   const [gridSettings, setGridSettings] = useState({
     cols: 4,
-    rows: 10
+    rows: 20
   });
 
   const [items, setItems] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [timeTaken, setTimeTaken] = useState(0);
+  const [history, setHistory] = useState(() => {
+    try {
+      const saved = localStorage.getItem('barcode_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error("Failed to load history", e);
+      return [];
+    }
+  });
+  const [showHistory, setShowHistory] = useState(false);
 
   // Load JsBarcode library dynamically
   useEffect(() => {
@@ -430,6 +440,11 @@ export default function App() {
     script.onload = () => setScriptLoaded(true);
     document.body.appendChild(script);
   }, []);
+
+  // Save history to local storage
+  useEffect(() => {
+    localStorage.setItem('barcode_history', JSON.stringify(history));
+  }, [history]);
 
   const padNumber = (num, size) => {
     let s = num + "";
@@ -459,6 +474,19 @@ export default function App() {
       }
 
       setItems(newItems);
+      
+      // Add to history
+      const newHistoryItem = {
+        id: Date.now(),
+        timestamp: new Date().toLocaleString(),
+        prefix,
+        startNum,
+        count,
+        padding,
+        printMode
+      };
+      setHistory(prev => [newHistoryItem, ...prev].slice(0, 50));
+
       const end = performance.now();
       setTimeTaken((end - start).toFixed(2));
       setIsGenerating(false);
@@ -531,6 +559,13 @@ export default function App() {
             </div>
             <div className="flex gap-2">
               <button 
+                onClick={() => setShowHistory(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-lg transition-colors"
+              >
+                <History className="h-4 w-4" />
+                History
+              </button>
+              <button 
                 onClick={exportBase64JSON}
                 disabled={items.length === 0 || !scriptLoaded}
                 className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors disabled:opacity-50"
@@ -592,8 +627,8 @@ export default function App() {
                     onChange={(e) => setPrintMode(e.target.value)}
                     className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 outline-none appearance-none bg-white cursor-pointer text-sm"
                  >
-                   <option value="single">Single (Label Printer)</option>
                    <option value="grid">Grid (Sheet)</option>
+                   <option value="single">Single (Label Printer)</option>
                  </select>
                  <Layout className="absolute right-3 top-2.5 h-4 w-4 text-gray-400 pointer-events-none"/>
                </div>
@@ -635,7 +670,7 @@ export default function App() {
                     <input 
                       id="gridRows"
                       type="number" 
-                      min="1" max="20"
+                      min="4" max="20"
                       value={gridSettings.rows}
                       onChange={(e) => setGridSettings({...gridSettings, rows: Math.max(1, parseInt(e.target.value) || 1)})}
                       className="w-full px-3 py-1 border rounded-md focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
@@ -711,7 +746,7 @@ export default function App() {
                       `}
                       style={printMode === 'grid' ? { 
                         // Using 10.8in to allow space for page number footer within A4 printable area
-                        height: `calc(10.8in / ${gridSettings.rows})`
+                        height: `calc(10.9in / ${gridSettings.rows})`
                       } : {}}
                     >
                       <BarcodeSVG text={item.serial} />
@@ -730,6 +765,75 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {/* History Modal */}
+      {showHistory && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 print:hidden backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-4 border-b flex justify-between items-center">
+              <h2 className="text-lg font-bold flex items-center gap-2 text-gray-800">
+                <History className="h-5 w-5 text-indigo-600" />
+                Generation History
+              </h2>
+              <button onClick={() => setShowHistory(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4">
+              {history.length === 0 ? (
+                <div className="text-center text-gray-400 py-12 flex flex-col items-center">
+                  <History className="h-12 w-12 mb-3 opacity-20" />
+                  <p>No history yet. Generate some barcodes!</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {history.map((entry) => (
+                    <div key={entry.id} className="border border-gray-100 rounded-lg p-3 flex justify-between items-center bg-gray-50 hover:bg-white hover:shadow-sm hover:border-indigo-100 transition-all">
+                      <div>
+                        <div className="font-medium text-gray-900 font-mono text-sm">
+                          {entry.prefix}{padNumber(entry.startNum, entry.padding)} <span className="text-gray-400">→</span> {entry.prefix}{padNumber(entry.startNum + entry.count - 1, entry.padding)}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                          <span>{entry.timestamp}</span>
+                          <span className="text-gray-300">•</span>
+                          <span>{entry.count} items</span>
+                          <span className="text-gray-300">•</span>
+                          <span className="capitalize">{entry.printMode === 'grid' ? 'Grid Layout' : 'Single Label'}</span>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => {
+                          setConfig(prev => ({ ...prev, prefix: entry.prefix, startNum: entry.startNum, count: entry.count, padding: entry.padding }));
+                          setPrintMode(entry.printMode);
+                          setShowHistory(false);
+                        }}
+                        className="text-xs font-medium text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 px-3 py-1.5 rounded transition-colors"
+                      >
+                        Restore
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            <div className="p-4 border-t bg-gray-50 rounded-b-xl flex justify-between items-center">
+              <span className="text-xs text-gray-500">Stores last 50 runs locally.</span>
+              {history.length > 0 && (
+                <button 
+                  onClick={() => {
+                    if(window.confirm('Are you sure you want to clear the history?')) setHistory([]);
+                  }}
+                  className="text-red-600 text-xs hover:text-red-700 flex items-center gap-1 font-medium px-2 py-1 hover:bg-red-50 rounded"
+                >
+                  <Trash2 className="h-3 w-3" /> Clear History
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Global Print Styles */}
       <style>{`
