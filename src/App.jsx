@@ -354,32 +354,35 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Printer, Download, RefreshCw, Layers, Settings, FileText, Layout, AlertCircle, Grid3X3 } from 'lucide-react';
 
+// Shared Barcode Options to ensure Preview and Export match
+const BARCODE_OPTIONS = {
+  format: "CODE128",
+  width: 2,
+  height: 40,
+  displayValue: true,
+  font: "monospace",
+  fontSize: 14,
+  textAlign: "center",
+  textMargin: 2,
+  margin: 5,
+  background: "#ffffff",
+  lineColor: "#000000"
+};
+
 // --- BARCODE COMPONENT (Uses JsBarcode) ---
-const BarcodeSVG = React.memo(({ text, format = "CODE128" }) => {
+const BarcodeSVG = React.memo(({ text }) => {
   const svgRef = useRef(null);
 
   useEffect(() => {
     // Check if library is loaded before attempting to render
     if (window.JsBarcode && svgRef.current) {
       try {
-        window.JsBarcode(svgRef.current, text, {
-          format: format,
-          width: 2,
-          height: 40, // Slightly reduced to safely fit high-density grids (like 10 rows)
-          displayValue: true,
-          font: "monospace",
-          fontSize: 14,
-          textAlign: "center",
-          textMargin: 2,
-          margin: 5,
-          background: "#ffffff",
-          lineColor: "#000000"
-        });
+        window.JsBarcode(svgRef.current, text, BARCODE_OPTIONS);
       } catch (e) {
         console.error("Barcode generation failed", e);
       }
     }
-  }, [text, format]);
+  }, [text]);
 
   return (
     <div className="w-full h-full flex items-center justify-center bg-white overflow-hidden">
@@ -474,19 +477,7 @@ export default function App() {
 
     const exportData = items.map(item => {
       const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      window.JsBarcode(svg, item.serial, {
-        format: "CODE128",
-        width: 2,
-        height: 40,
-        displayValue: true,
-        font: "monospace",
-        fontSize: 14,
-        textAlign: "center",
-        textMargin: 2,
-        margin: 5,
-        background: "#ffffff",
-        lineColor: "#000000"
-      });
+      window.JsBarcode(svg, item.serial, BARCODE_OPTIONS);
 
       const serializer = new XMLSerializer();
       const svgString = serializer.serializeToString(svg);
@@ -514,6 +505,13 @@ export default function App() {
   const handlePrint = () => {
     window.print();
   };
+
+  // Calculate pages for pagination
+  const itemsPerPage = printMode === 'grid' ? gridSettings.cols * gridSettings.rows : 1;
+  const pages = [];
+  for (let i = 0; i < items.length; i += itemsPerPage) {
+    pages.push(items.slice(i, i + itemsPerPage));
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 font-sans">
@@ -554,8 +552,9 @@ export default function App() {
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-200">
             {/* Input Config Group */}
             <div className="md:col-span-3">
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Prefix</label>
+              <label htmlFor="prefix" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Prefix</label>
               <input 
+                id="prefix"
                 type="text" 
                 value={config.prefix}
                 onChange={(e) => setConfig({...config, prefix: e.target.value})}
@@ -563,8 +562,9 @@ export default function App() {
               />
             </div>
             <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Start #</label>
+              <label htmlFor="startNum" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Start #</label>
               <input 
+                id="startNum"
                 type="number" 
                 value={config.startNum}
                 onChange={(e) => setConfig({...config, startNum: parseInt(e.target.value) || 0})}
@@ -572,8 +572,9 @@ export default function App() {
               />
             </div>
             <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Quantity</label>
+              <label htmlFor="count" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Quantity</label>
               <input 
+                id="count"
                 type="number" 
                 value={config.count}
                 onChange={(e) => setConfig({...config, count: parseInt(e.target.value) || 0})}
@@ -583,9 +584,10 @@ export default function App() {
 
             {/* Layout Group */}
             <div className="md:col-span-3 border-l pl-4 border-gray-200">
-               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Print Layout</label>
+               <label htmlFor="printMode" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Print Layout</label>
                <div className="relative">
                  <select 
+                    id="printMode"
                     value={printMode}
                     onChange={(e) => setPrintMode(e.target.value)}
                     className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 outline-none appearance-none bg-white cursor-pointer text-sm"
@@ -618,8 +620,9 @@ export default function App() {
                     Grid Options
                  </div>
                  <div className="md:col-span-1">
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Columns</label>
+                    <label htmlFor="gridCols" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Columns</label>
                     <input 
+                      id="gridCols"
                       type="number" 
                       min="1" max="10"
                       value={gridSettings.cols}
@@ -628,8 +631,9 @@ export default function App() {
                     />
                  </div>
                  <div className="md:col-span-1">
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Rows / Page</label>
+                    <label htmlFor="gridRows" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Rows / Page</label>
                     <input 
+                      id="gridRows"
                       type="number" 
                       min="1" max="20"
                       value={gridSettings.rows}
@@ -679,31 +683,48 @@ export default function App() {
             <p>Configure settings above and click Generate to start.</p>
           </div>
         ) : (
-          <div 
-            className={`${printMode === 'grid' ? 'grid gap-4 print:gap-1' : 'block'}`}
-            style={printMode === 'grid' ? {
-              // Dynamic Grid Columns based on settings
-              gridTemplateColumns: `repeat(${gridSettings.cols}, minmax(0, 1fr))`
-            } : {}}
-          >
-            {items.map((item) => (
+          <div>
+            {pages.map((pageItems, pageIndex) => (
               <div 
-                key={item.id} 
+                key={pageIndex} 
                 className={`
-                  border border-gray-200 bg-white rounded flex flex-col items-center justify-center overflow-hidden
-                  ${printMode === 'single' 
-                    ? 'print:border-0 print:p-0 print:m-0 print:break-after-page label-size-force' 
-                    : 'print:border-0 print:break-inside-avoid print:p-1 print:shadow-none'
-                  }
+                  relative 
+                  ${printMode === 'grid' ? 'mb-8 print:mb-0 print:h-[11.2in] print:w-full' : 'mb-4'}
+                  ${pageIndex < pages.length - 1 ? 'print:break-after-page' : ''}
                 `}
-                style={printMode === 'grid' ? { 
-                  // Calculate dynamic height: 10.5 inches is approx safe printable height on A4/Letter
-                  // We use a slightly smaller value for safety margin.
-                  minHeight: `calc(10.5in / ${gridSettings.rows})`,
-                  height: `calc(10.5in / ${gridSettings.rows})`
-                } : {}}
               >
-                 <BarcodeSVG text={item.serial} />
+                <div 
+                  className={`${printMode === 'grid' ? 'grid gap-4 print:gap-0' : 'block'}`}
+                  style={printMode === 'grid' ? {
+                    gridTemplateColumns: `repeat(${gridSettings.cols}, minmax(0, 1fr))`
+                  } : {}}
+                >
+                  {pageItems.map((item) => (
+                    <div 
+                      key={item.id} 
+                      className={`
+                        border border-gray-200 bg-white rounded flex flex-col items-center justify-center overflow-hidden
+                        ${printMode === 'single' 
+                          ? 'print:border-0 print:p-0 print:m-0 label-size-force' 
+                          : 'print:border-0 print:break-inside-avoid print:p-1 print:shadow-none'
+                        }
+                      `}
+                      style={printMode === 'grid' ? { 
+                        // Using 10.8in to allow space for page number footer within A4 printable area
+                        height: `calc(10.8in / ${gridSettings.rows})`
+                      } : {}}
+                    >
+                      <BarcodeSVG text={item.serial} />
+                    </div>
+                  ))}
+                </div>
+                
+                {/* Page Number Footer */}
+                {printMode === 'grid' && (
+                  <div className="absolute bottom-0 right-0 text-xs text-gray-400 print:text-gray-600 font-mono p-2 print:p-0">
+                    Page {pageIndex + 1}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -733,8 +754,6 @@ export default function App() {
             align-items: center !important;
             justify-content: center !important;
             overflow: hidden !important;
-            page-break-after: always;
-            break-after: page;
           }
         }
       `}</style>
